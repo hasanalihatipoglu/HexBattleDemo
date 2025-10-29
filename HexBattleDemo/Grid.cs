@@ -409,11 +409,37 @@ public class HexGrid : Control
     {
         currentTurn++;
         ResetAllUnitStates();
-        
+
         // Raise turn changed event
         TurnChanged?.Invoke(this, new TurnEventArgs(currentTurn));
-        
+
         Invalidate();
+    }
+
+    /// <summary>
+    /// Get list of faction colors that have units that can still act (not all passive)
+    /// </summary>
+    public List<string> GetActiveFactions()
+    {
+        HashSet<Color> activeFactionColors = new HashSet<Color>();
+
+        foreach (var unit in units.Values)
+        {
+            if (unit.IsAlive && unit.State != UnitState.Passive)
+            {
+                activeFactionColors.Add(unit.FactionColor);
+            }
+        }
+
+        // Convert colors to readable names
+        List<string> factionNames = new List<string>();
+        foreach (Color color in activeFactionColors)
+        {
+            factionNames.Add(color.Name);
+        }
+
+        factionNames.Sort(); // Sort alphabetically for consistency
+        return factionNames;
     }
 
     #endregion

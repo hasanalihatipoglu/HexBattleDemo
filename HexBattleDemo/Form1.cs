@@ -55,7 +55,17 @@ public partial class Form1 : Form
 
     private void UpdateTitle()
     {
-        this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn}";
+        var activeFactions = hexGrid.GetActiveFactions();
+
+        if (activeFactions.Count > 0)
+        {
+            string factionsText = string.Join(" & ", activeFactions);
+            this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn} - {factionsText} can act";
+        }
+        else
+        {
+            this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn} - All units passive";
+        }
     }
 
     private void HexGrid_HexClicked(object sender, HexClickEventArgs e)
@@ -63,19 +73,21 @@ public partial class Form1 : Form
         // Get unit at clicked position
         Unit unit = hexGrid.GetUnit(e.Q, e.R);
         Unit selectedUnit = hexGrid.GetSelectedUnit();
+        var activeFactions = hexGrid.GetActiveFactions();
+        string factionsText = activeFactions.Count > 0 ? string.Join(" & ", activeFactions) : "None";
 
         if (unit != null && selectedUnit == null)
         {
             // Show unit info when selecting
-            this.Text = $"Turn {hexGrid.CurrentTurn} - {unit.FactionColor.Name} unit at ({e.Q}, {e.R}) - Health: {unit.Health}/{unit.MaxHealth} - State: {unit.State}";
+            this.Text = $"Turn {hexGrid.CurrentTurn} ({factionsText}) - {unit.FactionColor.Name} unit at ({e.Q}, {e.R}) - Health: {unit.Health}/{unit.MaxHealth} - State: {unit.State}";
         }
         else if (selectedUnit != null)
         {
-            this.Text = $"Turn {hexGrid.CurrentTurn} - {selectedUnit.FactionColor.Name} unit selected - State: {selectedUnit.State} - Green=Move, Red=Attack";
+            this.Text = $"Turn {hexGrid.CurrentTurn} ({factionsText}) - {selectedUnit.FactionColor.Name} unit selected - State: {selectedUnit.State} - Green=Move, Red=Attack";
         }
         else
         {
-            this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn}";
+            UpdateTitle();
         }
     }
 }
