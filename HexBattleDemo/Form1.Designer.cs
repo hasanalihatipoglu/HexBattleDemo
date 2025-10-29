@@ -1,4 +1,4 @@
-﻿namespace HexBattleDemo
+namespace HexBattleDemo
 {
     partial class Form1
     {

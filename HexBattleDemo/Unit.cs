@@ -1,8 +1,18 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
 namespace HexBattleDemo;
+
+/// <summary>
+/// Unit state representing action availability
+/// </summary>
+public enum UnitState
+{
+    Active,     // Can move and attack (normal color)
+    Ready,      // Moved within attack range, can still attack (half gray)
+    Passive     // Has completed all actions (fully gray)
+}
 
 /// <summary>
 /// Represents a unit with faction color and health
@@ -15,6 +25,7 @@ public class Unit
     private Point gridPosition;
     private int movementRange;
     private int attackRange;
+    private UnitState state;
 
     public Unit(Color factionColor, int health, int maxHealth = 100, int movementRange = 2, int attackRange = 1)
     {
@@ -24,6 +35,7 @@ public class Unit
         this.movementRange = movementRange;
         this.attackRange = attackRange;
         this.gridPosition = new Point(0, 0);
+        this.state = UnitState.Active;
     }
 
     #region Properties
@@ -86,6 +98,15 @@ public class Unit
     }
 
     /// <summary>
+    /// Current state of the unit (Active, Ready, or Passive)
+    /// </summary>
+    public UnitState State
+    {
+        get { return state; }
+        set { state = value; }
+    }
+
+    /// <summary>
     /// Check if unit is alive
     /// </summary>
     public bool IsAlive
@@ -114,6 +135,14 @@ public class Unit
     }
 
     /// <summary>
+    /// Reset unit state to Active (e.g., at the start of a new turn)
+    /// </summary>
+    public void ResetState()
+    {
+        state = UnitState.Active;
+    }
+
+    /// <summary>
     /// Draw the unit at the specified center position
     /// </summary>
     public void Draw(Graphics g, PointF center, float radius)
@@ -133,8 +162,11 @@ public class Unit
             diameter
         );
 
-        // Draw circle with faction color
-        using (SolidBrush brush = new SolidBrush(factionColor))
+        // Get display color based on unit state
+        Color displayColor = GetDisplayColor();
+
+        // Draw circle with faction color (modified by state)
+        using (SolidBrush brush = new SolidBrush(displayColor))
         {
             g.FillEllipse(brush, circleBounds);
         }
@@ -160,12 +192,53 @@ public class Unit
             }
 
             // Draw text in white or black depending on background brightness
-            Color textColor = GetContrastColor(factionColor);
+            Color textColor = GetContrastColor(displayColor);
             using (SolidBrush textBrush = new SolidBrush(textColor))
             {
                 g.DrawString(healthText, font, textBrush, center, sf);
             }
         }
+    }
+
+    /// <summary>
+    /// Get display color based on unit state
+    /// </summary>
+    private Color GetDisplayColor()
+    {
+        switch (state)
+        {
+            case UnitState.Active:
+                // Normal color
+                return factionColor;
+
+            case UnitState.Ready:
+                // Half gray out - blend with gray 50/50
+                return BlendColors(factionColor, Color.Gray, 0.5f);
+
+            case UnitState.Passive:
+                // Fully gray out - blend with gray heavily
+                return BlendColors(factionColor, Color.Gray, 0.75f);
+
+            default:
+                return factionColor;
+        }
+    }
+
+    /// <summary>
+    /// Blend two colors together
+    /// </summary>
+    /// <param name="color1">Base color</param>
+    /// <param name="color2">Color to blend with</param>
+    /// <param name="ratio">How much of color2 to use (0.0 = all color1, 1.0 = all color2)</param>
+    private Color BlendColors(Color color1, Color color2, float ratio)
+    {
+        ratio = Math.Max(0, Math.Min(1, ratio)); // Clamp to 0-1
+
+        int r = (int)(color1.R * (1 - ratio) + color2.R * ratio);
+        int g = (int)(color1.G * (1 - ratio) + color2.G * ratio);
+        int b = (int)(color1.B * (1 - ratio) + color2.B * ratio);
+
+        return Color.FromArgb(r, g, b);
     }
 
     /// <summary>
@@ -202,6 +275,6 @@ public class Unit
 
     public override string ToString()
     {
-        return $"Unit at ({gridPosition.X}, {gridPosition.Y}) - Health: {health}/{maxHealth} - Faction: {factionColor.Name}";
+        return $"Unit at ({gridPosition.X}, {gridPosition.Y}) - Health: {health}/{maxHealth} - Faction: {factionColor.Name} - State: {state}";
     }
 }

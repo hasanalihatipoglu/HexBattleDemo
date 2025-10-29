@@ -38,8 +38,24 @@ public partial class Form1 : Form
 
         // Handle hex clicks
         hexGrid.HexClicked += HexGrid_HexClicked;
+        
+        // Handle turn changes
+        hexGrid.TurnChanged += HexGrid_TurnChanged;
 
         this.Controls.Add(hexGrid);
+        
+        // Set initial title
+        UpdateTitle();
+    }
+
+    private void HexGrid_TurnChanged(object sender, TurnEventArgs e)
+    {
+        UpdateTitle();
+    }
+
+    private void UpdateTitle()
+    {
+        this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn}";
     }
 
     private void HexGrid_HexClicked(object sender, HexClickEventArgs e)
@@ -51,15 +67,15 @@ public partial class Form1 : Form
         if (unit != null && selectedUnit == null)
         {
             // Show unit info when selecting
-            this.Text = $"Hex Grid - {unit.FactionColor.Name} unit at ({e.Q}, {e.R}) - Health: {unit.Health}/{unit.MaxHealth} - Green=Move, Red=Attack";
+            this.Text = $"Turn {hexGrid.CurrentTurn} - {unit.FactionColor.Name} unit at ({e.Q}, {e.R}) - Health: {unit.Health}/{unit.MaxHealth} - State: {unit.State}";
         }
         else if (selectedUnit != null)
         {
-            this.Text = $"Hex Grid - {selectedUnit.FactionColor.Name} unit selected - Green=Move, Red=Attack";
+            this.Text = $"Turn {hexGrid.CurrentTurn} - {selectedUnit.FactionColor.Name} unit selected - State: {selectedUnit.State} - Green=Move, Red=Attack";
         }
         else
         {
-            this.Text = $"Hex Grid with Combat - Click on a unit to select it";
+            this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn}";
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using HexBattleDemo;
+using HexBattleDemo;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -32,8 +32,10 @@ public class HexGrid : Control
     private Point? pendingMovePosition = null;
     private Point? hoveredHex = null;
     private List<Point> hoveredPath = new List<Point>();
+    private int currentTurn = 1;
 
     public event EventHandler<HexClickEventArgs> HexClicked;
+    public event EventHandler<TurnEventArgs> TurnChanged;
 
     public HexGrid()
     {
@@ -142,6 +144,14 @@ public class HexGrid : Control
             gridLineWidth = value;
             Invalidate();
         }
+    }
+
+    /// <summary>
+    /// Current turn number
+    /// </summary>
+    public int CurrentTurn
+    {
+        get { return currentTurn; }
     }
 
     #endregion
@@ -264,7 +274,7 @@ public class HexGrid : Control
     public void SelectUnit(int q, int r)
     {
         Unit unit = GetUnit(q, r);
-        if (unit != null && unit.IsAlive)
+        if (unit != null && unit.IsAlive && unit.State != UnitState.Passive)
         {
             selectedUnit = unit;
             selectedHex = new Point(q, r);
@@ -285,27 +295,41 @@ public class HexGrid : Control
                 }
             }
 
-            // Find available movement range (full 2 hex movement)
-            List<Point> reachableHexes = pathFinder.FindMovementRange(new Point(q, r), unit.MovementRange, blockedPositions);
-
-            // Remove enemy-occupied hexes from available destinations
-            // (enemies don't block pathfinding but you can't end movement on them)
-            highlightedHexes = new HashSet<Point>();
-            foreach (Point hex in reachableHexes)
+            // Determine available movement based on state
+            int availableMovement = unit.State == UnitState.Ready ? 0 : unit.MovementRange;
+            
+            if (availableMovement > 0)
             {
-                Unit occupant = GetUnit(hex.X, hex.Y);
-                if (occupant == null || occupant.FactionColor == unit.FactionColor)
+                // Find available movement range
+                List<Point> reachableHexes = pathFinder.FindMovementRange(new Point(q, r), availableMovement, blockedPositions);
+
+                // Remove enemy-occupied hexes from available destinations
+                highlightedHexes = new HashSet<Point>();
+                foreach (Point hex in reachableHexes)
                 {
-                    // Only add if empty or occupied by friendly (which shouldn't happen due to blocking)
-                    highlightedHexes.Add(hex);
+                    Unit occupant = GetUnit(hex.X, hex.Y);
+                    if (occupant == null || occupant.FactionColor == unit.FactionColor)
+                    {
+                        highlightedHexes.Add(hex);
+                    }
                 }
-                // Skip if occupied by enemy - can't move there
+            }
+            else
+            {
+                highlightedHexes.Clear();
             }
 
-            // Find direct attackable enemies
-            attackableHexes = new HashSet<Point>(
-                combatManager.GetAttackablePositions(new Point(q, r), unit.FactionColor, units, unit.AttackRange)
-            );
+            // Find direct attackable enemies (if unit is Active or Ready)
+            if (unit.State == UnitState.Active || unit.State == UnitState.Ready)
+            {
+                attackableHexes = new HashSet<Point>(
+                    combatManager.GetAttackablePositions(new Point(q, r), unit.FactionColor, units, unit.AttackRange)
+                );
+            }
+            else
+            {
+                attackableHexes.Clear();
+            }
 
             Invalidate();
         }
@@ -341,6 +365,55 @@ public class HexGrid : Control
     public bool IsHexHighlighted(int q, int r)
     {
         return highlightedHexes.Contains(new Point(q, r));
+    }
+
+    /// <summary>
+    /// Reset all units to Active state (e.g., start of new turn)
+    /// </summary>
+    public void ResetAllUnitStates()
+    {
+        foreach (var unit in units.Values)
+        {
+            unit.ResetState();
+        }
+        Invalidate();
+    }
+
+    /// <summary>
+    /// Check if all units are passive and advance to next turn if so
+    /// </summary>
+    private void CheckAndAdvanceTurn()
+    {
+        // Check if all alive units are passive
+        bool allPassive = true;
+        foreach (var unit in units.Values)
+        {
+            if (unit.IsAlive && unit.State != UnitState.Passive)
+            {
+                allPassive = false;
+                break;
+            }
+        }
+
+        // If all units are passive, advance to next turn
+        if (allPassive && units.Count > 0)
+        {
+            AdvanceToNextTurn();
+        }
+    }
+
+    /// <summary>
+    /// Advance to the next turn and reset all unit states
+    /// </summary>
+    private void AdvanceToNextTurn()
+    {
+        currentTurn++;
+        ResetAllUnitStates();
+        
+        // Raise turn changed event
+        TurnChanged?.Invoke(this, new TurnEventArgs(currentTurn));
+        
+        Invalidate();
     }
 
     #endregion
@@ -806,7 +879,6 @@ public class HexGrid : Control
                     if (destinationUnit != null && destinationUnit.FactionColor != selectedUnit.FactionColor)
                     {
                         // Cannot move onto an enemy unit
-                        // But we could add logic here to auto-attack if adjacent
                         return;
                     }
 
@@ -921,7 +993,7 @@ public class HexGrid : Control
         if (distance >= unit.MovementRange)
         {
             // Moved maximum distance - unit is now passive
-          //  unit.State = UnitState.Passive;
+            unit.State = UnitState.Passive;
         }
         else if (distance == 1)
         {
@@ -932,19 +1004,22 @@ public class HexGrid : Control
             if (attackableEnemies.Count > 0)
             {
                 // Can still attack - unit is ready
-               // unit.State = UnitState.Ready;
+                unit.State = UnitState.Ready;
             }
             else
             {
                 // No enemies to attack - unit is passive
-               // unit.State = UnitState.Passive;
+                unit.State = UnitState.Passive;
             }
         }
         else
         {
-            // Moved less than max but not attack range - passive
-           // unit.State = UnitState.Passive;
+            // Moved less than max but not 1 hex - passive
+            unit.State = UnitState.Passive;
         }
+
+        // Check if all units are passive and advance turn if needed
+        CheckAndAdvanceTurn();
     }
 
     private void PerformAttack(Point attackerPos, Point defenderPos)
@@ -957,7 +1032,10 @@ public class HexGrid : Control
             combatManager.ResolveCombat(attacker, defender, attackerPos, defenderPos);
 
             // After attacking, unit becomes passive
-           // attacker.State = UnitState.Passive;
+            attacker.State = UnitState.Passive;
+
+            // Check if all units are passive and advance turn if needed
+            CheckAndAdvanceTurn();
         }
     }
 
@@ -1000,6 +1078,19 @@ public enum UnitActionState
     None,                           // No unit selected
     SelectingAction,                // Unit selected, choosing move or attack
     SelectingAttackAfterMove        // Moved 1 hex, now selecting attack target
+}
+
+/// <summary>
+/// Event arguments for turn change events
+/// </summary>
+public class TurnEventArgs : EventArgs
+{
+    public int TurnNumber { get; private set; }
+
+    public TurnEventArgs(int turnNumber)
+    {
+        TurnNumber = turnNumber;
+    }
 }
 
 #endregion
