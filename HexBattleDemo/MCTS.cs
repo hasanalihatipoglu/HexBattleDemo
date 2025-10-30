@@ -81,7 +81,7 @@ public class MonteCarloTreeSearch
     private int maxIterations;
     private double explorationConstant;
 
-    public MonteCarloTreeSearch(Color aiColor, int gridWidth, int gridHeight, int maxIterations = 1000)
+    public MonteCarloTreeSearch(Color aiColor, int gridWidth, int gridHeight, int maxIterations = 5000)
     {
         this.aiColor = aiColor;
         this.simulator = new GameSimulator(gridWidth, gridHeight);
@@ -239,19 +239,110 @@ public class MonteCarloTreeSearch
     }
 
     /// <summary>
-    /// Choose an action during simulation (with some intelligent bias)
+    /// Choose an action during simulation (with intelligent heuristics)
     /// </summary>
     private GameAction ChooseSimulationAction(GameState state, List<GameAction> actions, Color player)
     {
-        // Prefer attacks over moves
+        // Separate action types
         var attacks = actions.Where(a => a.Type == ActionType.Attack || a.Type == ActionType.MoveAndAttack).ToList();
+        var moves = actions.Where(a => a.Type == ActionType.Move).ToList();
 
-        if (attacks.Count > 0 && random.NextDouble() > 0.3) // 70% chance to attack if possible
+        // Strongly prefer attacks (90% of the time if available)
+        if (attacks.Count > 0 && random.NextDouble() > 0.1)
         {
+            // Smart attack selection: prioritize killing blows and low-health targets
+            var scoredAttacks = new List<(GameAction action, double score)>();
+
+            foreach (var attack in attacks)
+            {
+                double attackScore = 0;
+                Point targetPos = attack.AttackPosition ?? attack.TargetPosition ?? new Point(0, 0);
+                var target = state.GetUnitAt(targetPos);
+
+                if (target != null)
+                {
+                    // Huge bonus for killing blows (estimated)
+                    if (target.Health <= 35) // Likely to kill
+                        attackScore += 1000;
+
+                    // Prefer low health targets
+                    attackScore += (100 - target.Health);
+
+                    // Prefer move+attack over direct attack (better positioning)
+                    if (attack.Type == ActionType.MoveAndAttack)
+                        attackScore += 50;
+
+                    scoredAttacks.Add((attack, attackScore));
+                }
+            }
+
+            // Choose best attack with some randomness (80% best, 20% random)
+            if (scoredAttacks.Count > 0)
+            {
+                if (random.NextDouble() > 0.2)
+                {
+                    // Pick best attack
+                    return scoredAttacks.OrderByDescending(a => a.score).First().action;
+                }
+                else
+                {
+                    // Random attack for variety
+                    return attacks[random.Next(attacks.Count)];
+                }
+            }
+
             return attacks[random.Next(attacks.Count)];
         }
 
-        // Otherwise random action
+        // If no good attacks, make smart moves
+        if (moves.Count > 0)
+        {
+            var myUnits = state.GetFactionUnits(player);
+            var enemyUnits = state.Units.Where(u => u.FactionColor != player).ToList();
+
+            if (enemyUnits.Count > 0)
+            {
+                // Score moves by how close they get us to enemies
+                var scoredMoves = new List<(GameAction action, double score)>();
+
+                foreach (var move in moves)
+                {
+                    double moveScore = 0;
+                    Point dest = move.TargetPosition ?? new Point(0, 0);
+
+                    // Prefer moves that get us closer to enemies
+                    double minDistToEnemy = enemyUnits.Min(e =>
+                        Math.Abs(dest.X - e.Position.X) + Math.Abs(dest.Y - e.Position.Y));
+                    moveScore -= minDistToEnemy * 10; // Negative distance = closer is better
+
+                    // Bonus for moves that put us in attack range
+                    var myUnit = state.GetUnitAt(move.UnitPosition);
+                    if (myUnit != null)
+                    {
+                        foreach (var enemy in enemyUnits)
+                        {
+                            int distToEnemy = Math.Abs(dest.X - enemy.Position.X) + Math.Abs(dest.Y - enemy.Position.Y);
+                            if (distToEnemy <= myUnit.AttackRange)
+                            {
+                                moveScore += 100; // Can attack next turn
+                                if (enemy.Health <= 30)
+                                    moveScore += 100; // Can finish off weak enemy
+                            }
+                        }
+                    }
+
+                    scoredMoves.Add((move, moveScore));
+                }
+
+                // Choose best move (with some randomness)
+                if (scoredMoves.Count > 0 && random.NextDouble() > 0.3)
+                {
+                    return scoredMoves.OrderByDescending(m => m.score).First().action;
+                }
+            }
+        }
+
+        // Fallback: random action
         return actions[random.Next(actions.Count)];
     }
 

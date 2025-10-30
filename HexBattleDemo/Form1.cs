@@ -42,8 +42,8 @@ public partial class Form1 : Form
         // Handle turn changes
         hexGrid.TurnChanged += HexGrid_TurnChanged;
 
-        // Setup AI for Blue player
-        hexGrid.SetupAI(Color.Blue, thinkingTimeMs: 1500);
+        // Setup AI for Blue player (3 seconds thinking time for stronger play)
+        hexGrid.SetupAI(Color.Blue, thinkingTimeMs: 3000);
 
         this.Controls.Add(hexGrid);
 

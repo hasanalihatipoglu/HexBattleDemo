@@ -298,26 +298,95 @@ public class GameSimulator
 
         double score = 0;
 
-        // Health advantage
+        // 1. Unit count advantage (game-winning)
+        score += (friendlyUnits.Count - enemyUnits.Count) * 1000;
+
+        // 2. Total health advantage (material advantage)
         int friendlyHealth = friendlyUnits.Sum(u => u.Health);
         int enemyHealth = enemyUnits.Sum(u => u.Health);
-        score += (friendlyHealth - enemyHealth) * 10;
+        score += (friendlyHealth - enemyHealth) * 5;
 
-        // Unit count advantage
-        score += (friendlyUnits.Count - enemyUnits.Count) * 500;
+        // 3. Health percentage (prefer healthy units)
+        double friendlyHealthPct = friendlyUnits.Average(u => (double)u.Health / u.MaxHealth);
+        double enemyHealthPct = enemyUnits.Average(u => (double)u.Health / u.MaxHealth);
+        score += (friendlyHealthPct - enemyHealthPct) * 200;
 
-        // Positional advantage - prefer being closer to enemies
-        double minDistanceToEnemy = double.MaxValue;
+        // 4. Tactical positioning evaluation
+        foreach (var friendly in friendlyUnits)
+        {
+            // Count enemies we can attack
+            var attackableEnemies = GetAttackableEnemiesFromPosition(state, friendly.Position, faction, friendly.AttackRange);
+            score += attackableEnemies.Count * 50; // Reward attacking position
+
+            // Bonus for being able to kill low-health enemies
+            foreach (var enemy in attackableEnemies)
+            {
+                if (enemy.Health <= 30) // Low health enemy
+                    score += 100; // Big bonus for kill opportunities
+            }
+
+            // Penalty for being in enemy attack range (danger!)
+            int enemiesThreateningUs = 0;
+            foreach (var enemy in enemyUnits)
+            {
+                int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
+                if (dist > 0 && dist <= enemy.AttackRange)
+                {
+                    enemiesThreateningUs++;
+                    // Extra penalty if we're low health and threatened
+                    if (friendly.Health <= 30)
+                        score -= 80; // Danger!
+                }
+            }
+            score -= enemiesThreateningUs * 30; // Penalty for being threatened
+
+            // Reward for keeping distance when low health
+            if (friendly.Health <= 30)
+            {
+                int minDistToEnemy = enemyUnits.Min(e => pathFinder.GetDistance(friendly.Position, e.Position));
+                score += minDistToEnemy * 15; // Retreat when wounded
+            }
+        }
+
+        // 5. Enemy vulnerability evaluation
+        foreach (var enemy in enemyUnits)
+        {
+            // How many of our units can attack this enemy?
+            int friendliesThreateningEnemy = 0;
+            foreach (var friendly in friendlyUnits)
+            {
+                int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
+                if (dist > 0 && dist <= friendly.AttackRange)
+                {
+                    friendliesThreateningEnemy++;
+                }
+            }
+
+            // Bonus for outnumbering enemy (focus fire)
+            if (friendliesThreateningEnemy > 1)
+                score += friendliesThreateningEnemy * 40;
+
+            // Big bonus if enemy is low health and we can reach them
+            if (enemy.Health <= 30 && friendliesThreateningEnemy > 0)
+                score += 150; // Prioritize kills
+        }
+
+        // 6. Aggressive positioning - moderate preference for being closer
+        double avgDistToEnemy = 0;
+        int distCount = 0;
         foreach (var friendly in friendlyUnits)
         {
             foreach (var enemy in enemyUnits)
             {
-                int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
-                if (dist < minDistanceToEnemy)
-                    minDistanceToEnemy = dist;
+                avgDistToEnemy += pathFinder.GetDistance(friendly.Position, enemy.Position);
+                distCount++;
             }
         }
-        score -= minDistanceToEnemy * 5; // Closer is better
+        if (distCount > 0)
+        {
+            avgDistToEnemy /= distCount;
+            score -= avgDistToEnemy * 10; // Moderate bonus for being closer
+        }
 
         return score;
     }
