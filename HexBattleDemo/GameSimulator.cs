@@ -22,7 +22,7 @@ public class GameSimulator
     /// <summary>
     /// Get all possible actions for a unit in the current state
     /// </summary>
-    public List<GameAction> GetPossibleActions(GameState state, UnitState unit)
+    public List<GameAction> GetPossibleActions(GameState state, SimulatedUnit unit)
     {
         List<GameAction> actions = new List<GameAction>();
 
@@ -168,7 +168,7 @@ public class GameSimulator
     /// <summary>
     /// Perform a move action
     /// </summary>
-    private void PerformMove(GameState state, UnitState unit, Point destination)
+    private void PerformMove(GameState state, SimulatedUnit unit, Point destination)
     {
         int distance = pathFinder.GetDistance(unit.Position, destination);
         unit.MoveTo(destination);
@@ -193,7 +193,7 @@ public class GameSimulator
     /// <summary>
     /// Perform an attack action
     /// </summary>
-    private void PerformAttack(GameState state, UnitState attacker, Point defenderPos)
+    private void PerformAttack(GameState state, SimulatedUnit attacker, Point defenderPos)
     {
         var defender = state.GetUnitAt(defenderPos);
         if (defender == null || !defender.IsAlive)
@@ -230,7 +230,7 @@ public class GameSimulator
     /// <summary>
     /// Calculate damage (same formula as CombatManager)
     /// </summary>
-    private int CalculateDamage(UnitState attacker, UnitState defender)
+    private int CalculateDamage(SimulatedUnit attacker, SimulatedUnit defender)
     {
         // Base damage: 20-30% of defender's max health
         int baseDamage = (int)(defender.MaxHealth * (0.20 + random.NextDouble() * 0.10));
@@ -246,7 +246,7 @@ public class GameSimulator
     /// <summary>
     /// Get all enemies within attack range of a unit
     /// </summary>
-    private List<UnitState> GetAttackableEnemies(GameState state, UnitState unit)
+    private List<SimulatedUnit> GetAttackableEnemies(GameState state, SimulatedUnit unit)
     {
         return GetAttackableEnemiesFromPosition(state, unit.Position, unit.FactionColor, unit.AttackRange);
     }
@@ -254,9 +254,9 @@ public class GameSimulator
     /// <summary>
     /// Get all enemies within attack range from a specific position
     /// </summary>
-    private List<UnitState> GetAttackableEnemiesFromPosition(GameState state, Point position, Color faction, int attackRange)
+    private List<SimulatedUnit> GetAttackableEnemiesFromPosition(GameState state, Point position, Color faction, int attackRange)
     {
-        List<UnitState> enemies = new List<UnitState>();
+        List<SimulatedUnit> enemies = new List<SimulatedUnit>();
 
         foreach (var unit in state.Units)
         {

@@ -10,14 +10,14 @@ namespace HexBattleDemo;
 /// </summary>
 public class GameState
 {
-    public List<UnitState> Units { get; set; }
+    public List<SimulatedUnit> Units { get; set; }
     public int TurnNumber { get; set; }
     public int GridWidth { get; set; }
     public int GridHeight { get; set; }
 
     public GameState()
     {
-        Units = new List<UnitState>();
+        Units = new List<SimulatedUnit>();
     }
 
     /// <summary>
@@ -30,7 +30,7 @@ public class GameState
             TurnNumber = this.TurnNumber,
             GridWidth = this.GridWidth,
             GridHeight = this.GridHeight,
-            Units = new List<UnitState>()
+            Units = new List<SimulatedUnit>()
         };
 
         foreach (var unit in Units)
@@ -51,7 +51,7 @@ public class GameState
             TurnNumber = grid.CurrentTurn,
             GridWidth = grid.GridWidth,
             GridHeight = grid.GridHeight,
-            Units = new List<UnitState>()
+            Units = new List<SimulatedUnit>()
         };
 
         // Extract all units from the grid
@@ -62,7 +62,7 @@ public class GameState
                 Unit unit = grid.GetUnit(q, r);
                 if (unit != null && unit.IsAlive)
                 {
-                    state.Units.Add(new UnitState
+                    state.Units.Add(new SimulatedUnit
                     {
                         Position = new Point(q, r),
                         Health = unit.Health,
@@ -82,7 +82,7 @@ public class GameState
     /// <summary>
     /// Get unit at specified position
     /// </summary>
-    public UnitState GetUnitAt(Point position)
+    public SimulatedUnit GetUnitAt(Point position)
     {
         return Units.FirstOrDefault(u => u.Position.X == position.X && u.Position.Y == position.Y);
     }
@@ -90,7 +90,7 @@ public class GameState
     /// <summary>
     /// Get all units of a specific faction
     /// </summary>
-    public List<UnitState> GetFactionUnits(Color faction)
+    public List<SimulatedUnit> GetFactionUnits(Color faction)
     {
         return Units.Where(u => u.FactionColor == faction).ToList();
     }
@@ -139,7 +139,7 @@ public class GameState
 /// <summary>
 /// Lightweight representation of a unit for simulations
 /// </summary>
-public class UnitState
+public class SimulatedUnit
 {
     public Point Position { get; set; }
     public int Health { get; set; }
@@ -151,9 +151,9 @@ public class UnitState
 
     public bool IsAlive => Health > 0;
 
-    public UnitState Clone()
+    public SimulatedUnit Clone()
     {
-        return new UnitState
+        return new SimulatedUnit
         {
             Position = new Point(Position.X, Position.Y),
             Health = this.Health,
