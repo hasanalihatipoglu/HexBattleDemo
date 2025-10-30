@@ -247,8 +247,8 @@ public class MonteCarloTreeSearch
         var attacks = actions.Where(a => a.Type == ActionType.Attack || a.Type == ActionType.MoveAndAttack).ToList();
         var moves = actions.Where(a => a.Type == ActionType.Move).ToList();
 
-        // Strongly prefer attacks (90% of the time if available)
-        if (attacks.Count > 0 && random.NextDouble() > 0.1)
+        // ALWAYS prefer attacks if available (95% of the time)
+        if (attacks.Count > 0 && random.NextDouble() > 0.05)
         {
             // Smart attack selection: prioritize killing blows and low-health targets
             var scoredAttacks = new List<(GameAction action, double score)>();
@@ -261,25 +261,27 @@ public class MonteCarloTreeSearch
 
                 if (target != null)
                 {
-                    // Huge bonus for killing blows (estimated)
-                    if (target.Health <= 35) // Likely to kill
-                        attackScore += 1000;
+                    // MASSIVE bonus for killing blows
+                    if (target.Health <= 40) // Likely to kill
+                        attackScore += 10000;
+                    else if (target.Health <= 60) // Weak target
+                        attackScore += 5000;
 
                     // Prefer low health targets
-                    attackScore += (100 - target.Health);
+                    attackScore += (100 - target.Health) * 10;
 
                     // Prefer move+attack over direct attack (better positioning)
                     if (attack.Type == ActionType.MoveAndAttack)
-                        attackScore += 50;
+                        attackScore += 100;
 
                     scoredAttacks.Add((attack, attackScore));
                 }
             }
 
-            // Choose best attack with some randomness (80% best, 20% random)
+            // Almost always choose best attack (90% best, 10% random)
             if (scoredAttacks.Count > 0)
             {
-                if (random.NextDouble() > 0.2)
+                if (random.NextDouble() > 0.1)
                 {
                     // Pick best attack
                     return scoredAttacks.OrderByDescending(a => a.score).First().action;

@@ -314,37 +314,41 @@ public class GameSimulator
         // 4. Tactical positioning evaluation
         foreach (var friendly in friendlyUnits)
         {
-            // Count enemies we can attack
+            // Count enemies we can attack - HUGE bonus!
             var attackableEnemies = GetAttackableEnemiesFromPosition(state, friendly.Position, faction, friendly.AttackRange);
-            score += attackableEnemies.Count * 50; // Reward attacking position
+            score += attackableEnemies.Count * 200; // MASSIVE reward for attacking position
 
             // Bonus for being able to kill low-health enemies
             foreach (var enemy in attackableEnemies)
             {
-                if (enemy.Health <= 30) // Low health enemy
-                    score += 100; // Big bonus for kill opportunities
+                if (enemy.Health <= 40) // Killable enemy
+                    score += 300; // HUGE bonus for kill opportunities
+                else if (enemy.Health <= 60) // Weak enemy
+                    score += 150; // Big bonus for damaging weak targets
             }
 
-            // Penalty for being in enemy attack range (danger!)
-            int enemiesThreateningUs = 0;
-            foreach (var enemy in enemyUnits)
+            // Only penalize being threatened if we CAN'T attack back
+            if (attackableEnemies.Count == 0)
             {
-                int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
-                if (dist > 0 && dist <= enemy.AttackRange)
+                int enemiesThreateningUs = 0;
+                foreach (var enemy in enemyUnits)
                 {
-                    enemiesThreateningUs++;
-                    // Extra penalty if we're low health and threatened
-                    if (friendly.Health <= 30)
-                        score -= 80; // Danger!
+                    int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
+                    if (dist > 0 && dist <= enemy.AttackRange)
+                    {
+                        enemiesThreateningUs++;
+                    }
                 }
-            }
-            score -= enemiesThreateningUs * 30; // Penalty for being threatened
 
-            // Reward for keeping distance when low health
-            if (friendly.Health <= 30)
-            {
-                int minDistToEnemy = enemyUnits.Min(e => pathFinder.GetDistance(friendly.Position, e.Position));
-                score += minDistToEnemy * 15; // Retreat when wounded
+                // Only a small penalty for being threatened when not attacking
+                score -= enemiesThreateningUs * 20;
+
+                // Only retreat if severely wounded AND can't attack
+                if (friendly.Health <= 20) // Very low health
+                {
+                    int minDistToEnemy = enemyUnits.Min(e => pathFinder.GetDistance(friendly.Position, e.Position));
+                    score += minDistToEnemy * 10; // Small retreat bonus only if critical
+                }
             }
         }
 
@@ -362,30 +366,42 @@ public class GameSimulator
                 }
             }
 
-            // Bonus for outnumbering enemy (focus fire)
+            // Massive bonus for outnumbering enemy (focus fire is key!)
             if (friendliesThreateningEnemy > 1)
-                score += friendliesThreateningEnemy * 40;
+                score += friendliesThreateningEnemy * 80; // Focus fire bonus
 
-            // Big bonus if enemy is low health and we can reach them
-            if (enemy.Health <= 30 && friendliesThreateningEnemy > 0)
-                score += 150; // Prioritize kills
+            // HUGE bonus if enemy is low health and we can reach them
+            if (friendliesThreateningEnemy > 0)
+            {
+                if (enemy.Health <= 40)
+                    score += 250; // Massive bonus - finish them!
+                else if (enemy.Health <= 60)
+                    score += 100; // Good bonus for weak targets
+            }
         }
 
-        // 6. Aggressive positioning - moderate preference for being closer
+        // 6. Aggressive positioning - prefer being in combat range
         double avgDistToEnemy = 0;
         int distCount = 0;
         foreach (var friendly in friendlyUnits)
         {
             foreach (var enemy in enemyUnits)
             {
-                avgDistToEnemy += pathFinder.GetDistance(friendly.Position, enemy.Position);
+                int dist = pathFinder.GetDistance(friendly.Position, enemy.Position);
+                avgDistToEnemy += dist;
                 distCount++;
+
+                // Extra bonus for being in attack range (ready to fight!)
+                if (dist > 0 && dist <= friendly.AttackRange)
+                {
+                    score += 50; // Reward being in striking distance
+                }
             }
         }
         if (distCount > 0)
         {
             avgDistToEnemy /= distCount;
-            score -= avgDistToEnemy * 10; // Moderate bonus for being closer
+            score -= avgDistToEnemy * 15; // Strong preference for being closer
         }
 
         return score;
