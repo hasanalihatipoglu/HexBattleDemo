@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace HexBattleDemo;
@@ -33,6 +34,9 @@ public class HexGrid : Control
     private Point? hoveredHex = null;
     private List<Point> hoveredPath = new List<Point>();
     private int currentTurn = 1;
+    private AIPlayer aiPlayer = null;
+    private bool aiThinking = false;
+    private Color currentPlayerColor = Color.Red; // Red starts first
 
     public event EventHandler<HexClickEventArgs> HexClicked;
     public event EventHandler<TurnEventArgs> TurnChanged;
@@ -152,6 +156,14 @@ public class HexGrid : Control
     public int CurrentTurn
     {
         get { return currentTurn; }
+    }
+
+    /// <summary>
+    /// Current player's color
+    /// </summary>
+    public Color CurrentPlayerColor
+    {
+        get { return currentPlayerColor; }
     }
 
     #endregion
@@ -274,7 +286,7 @@ public class HexGrid : Control
     public void SelectUnit(int q, int r)
     {
         Unit unit = GetUnit(q, r);
-        if (unit != null && unit.IsAlive && unit.State != UnitState.Passive)
+        if (unit != null && unit.IsAlive && unit.State != UnitState.Passive && unit.FactionColor == currentPlayerColor)
         {
             selectedUnit = unit;
             selectedHex = new Point(q, r);
@@ -380,39 +392,162 @@ public class HexGrid : Control
     }
 
     /// <summary>
-    /// Check if all units are passive and advance to next turn if so
+    /// Check if all units of current player are passive and switch player/advance turn if so
     /// </summary>
     private void CheckAndAdvanceTurn()
     {
-        // Check if all alive units are passive
-        bool allPassive = true;
+        // Check if all alive units of current player are passive
+        bool allCurrentPlayerUnitsPassive = true;
         foreach (var unit in units.Values)
         {
-            if (unit.IsAlive && unit.State != UnitState.Passive)
+            if (unit.IsAlive && unit.FactionColor == currentPlayerColor && unit.State != UnitState.Passive)
             {
-                allPassive = false;
+                allCurrentPlayerUnitsPassive = false;
                 break;
             }
         }
 
-        // If all units are passive, advance to next turn
-        if (allPassive && units.Count > 0)
+        // If all current player's units are passive, switch to next player
+        if (allCurrentPlayerUnitsPassive && units.Count > 0)
         {
-            AdvanceToNextTurn();
+            SwitchPlayer();
         }
     }
 
     /// <summary>
-    /// Advance to the next turn and reset all unit states
+    /// Switch to the next player
     /// </summary>
-    private void AdvanceToNextTurn()
+    private void SwitchPlayer()
     {
-        currentTurn++;
-        ResetAllUnitStates();
-        
-        // Raise turn changed event
-        TurnChanged?.Invoke(this, new TurnEventArgs(currentTurn));
-        
+        // Get all factions
+        var factions = units.Values.Where(u => u.IsAlive).Select(u => u.FactionColor).Distinct().ToList();
+
+        if (factions.Count <= 1)
+            return; // Game over or only one faction left
+
+        // Find next faction
+        int currentIndex = factions.IndexOf(currentPlayerColor);
+        if (currentIndex == -1)
+        {
+            currentPlayerColor = factions[0];
+        }
+        else
+        {
+            currentPlayerColor = factions[(currentIndex + 1) % factions.Count];
+        }
+
+        // Reset only the new current player's units
+        foreach (var unit in units.Values)
+        {
+            if (unit.FactionColor == currentPlayerColor)
+            {
+                unit.ResetState();
+            }
+        }
+
+        // If we've cycled back to the first faction, increment turn
+        if (currentPlayerColor == factions[0])
+        {
+            currentTurn++;
+            TurnChanged?.Invoke(this, new TurnEventArgs(currentTurn));
+        }
+
+        Invalidate();
+
+        // Trigger AI if it's AI's turn
+        TriggerAIIfNeeded();
+    }
+
+    /// <summary>
+    /// Set up AI player for a specific faction
+    /// </summary>
+    public void SetupAI(Color aiColor, int thinkingTimeMs = 1500)
+    {
+        aiPlayer = new AIPlayer(this, aiColor, thinkingTimeMs);
+        aiPlayer.ThinkingStarted += AIPlayer_ThinkingStarted;
+        aiPlayer.ThinkingCompleted += AIPlayer_ThinkingCompleted;
+
+        // Trigger AI if it's already AI's turn
+        TriggerAIIfNeeded();
+    }
+
+    /// <summary>
+    /// Trigger AI to take its turn if needed
+    /// </summary>
+    private async void TriggerAIIfNeeded()
+    {
+        if (aiPlayer != null && aiPlayer.IsAITurn() && !aiThinking)
+        {
+            aiThinking = true;
+
+            // Small delay before AI acts (for visual clarity)
+            await System.Threading.Tasks.Task.Delay(500);
+
+            // AI takes turn
+            await aiPlayer.TakeTurnAsync();
+
+            aiThinking = false;
+
+            // Check if AI has more moves
+            if (aiPlayer.IsAITurn())
+            {
+                TriggerAIIfNeeded();
+            }
+        }
+    }
+
+    private void AIPlayer_ThinkingStarted(object sender, EventArgs e)
+    {
+        // Could update UI to show AI is thinking
+    }
+
+    private void AIPlayer_ThinkingCompleted(object sender, EventArgs e)
+    {
+        // Could update UI to show AI finished thinking
+    }
+
+    /// <summary>
+    /// Execute an action programmatically (used by AI)
+    /// </summary>
+    public void ExecuteAction(GameAction action)
+    {
+        if (action == null)
+            return;
+
+        Unit unit = GetUnit(action.UnitPosition.X, action.UnitPosition.Y);
+        if (unit == null || !unit.IsAlive)
+            return;
+
+        switch (action.Type)
+        {
+            case ActionType.Move:
+                if (action.TargetPosition.HasValue)
+                {
+                    PerformMove(action.UnitPosition, action.TargetPosition.Value);
+                }
+                break;
+
+            case ActionType.Attack:
+                if (action.AttackPosition.HasValue)
+                {
+                    PerformAttack(action.UnitPosition, action.AttackPosition.Value);
+                }
+                break;
+
+            case ActionType.MoveAndAttack:
+                if (action.TargetPosition.HasValue && action.AttackPosition.HasValue)
+                {
+                    PerformMove(action.UnitPosition, action.TargetPosition.Value);
+                    PerformAttack(action.TargetPosition.Value, action.AttackPosition.Value);
+                }
+                break;
+
+            case ActionType.Pass:
+                unit.State = UnitState.Passive;
+                CheckAndAdvanceTurn();
+                break;
+        }
+
         Invalidate();
     }
 
@@ -841,6 +976,10 @@ public class HexGrid : Control
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
+
+        // Block input if AI is thinking
+        if (aiThinking)
+            return;
 
         Point? hex = PixelToHex(e.X, e.Y);
 

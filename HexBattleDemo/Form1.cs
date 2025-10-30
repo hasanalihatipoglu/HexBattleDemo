@@ -42,8 +42,11 @@ public partial class Form1 : Form
         // Handle turn changes
         hexGrid.TurnChanged += HexGrid_TurnChanged;
 
+        // Setup AI for Blue player
+        hexGrid.SetupAI(Color.Blue, thinkingTimeMs: 1500);
+
         this.Controls.Add(hexGrid);
-        
+
         // Set initial title
         UpdateTitle();
     }
@@ -55,7 +58,8 @@ public partial class Form1 : Form
 
     private void UpdateTitle()
     {
-        this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn}";
+        string playerName = hexGrid.CurrentPlayerColor == Color.Red ? "Red (Human)" : "Blue (AI)";
+        this.Text = $"Hex Grid Battle - Turn {hexGrid.CurrentTurn} - {playerName}'s Turn";
     }
 
     private void HexGrid_HexClicked(object sender, HexClickEventArgs e)
