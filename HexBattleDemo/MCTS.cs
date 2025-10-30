@@ -120,12 +120,22 @@ public class MonteCarloTreeSearch
             iterations++;
         }
 
-        // Return the best child based on visit count (most robust)
+        // Return the best action - STRONGLY PREFER ATTACKS!
         if (root.Children.Count == 0)
         {
-            // No children expanded, return random action
+            // No children expanded, return first attack if available
             if (root.UntriedActions.Count > 0)
+            {
+                // Find first attack action
+                var attackAction = root.UntriedActions.FirstOrDefault(a =>
+                    a.Type == ActionType.Attack || a.Type == ActionType.MoveAndAttack);
+
+                if (attackAction != null)
+                    return attackAction;
+
+                // Otherwise random action
                 return root.UntriedActions[random.Next(root.UntriedActions.Count)];
+            }
 
             // Fallback - pass action
             var firstUnit = initialState.GetFactionUnits(aiColor).FirstOrDefault();
@@ -135,6 +145,38 @@ public class MonteCarloTreeSearch
             return null;
         }
 
+        // Find best action with ATTACK PRIORITY
+        // If there are any attack actions with decent visits, prefer them over moves
+        var attackChildren = root.Children.Where(c =>
+            c.Action.Type == ActionType.Attack || c.Action.Type == ActionType.MoveAndAttack).ToList();
+
+        if (attackChildren.Count > 0)
+        {
+            // Get best attack by visits
+            var bestAttack = attackChildren.OrderByDescending(c => c.Visits).First();
+
+            // Get best move by visits (for comparison)
+            var moveChildren = root.Children.Where(c =>
+                c.Action.Type != ActionType.Attack && c.Action.Type != ActionType.MoveAndAttack).ToList();
+
+            if (moveChildren.Count > 0)
+            {
+                var bestMove = moveChildren.OrderByDescending(c => c.Visits).First();
+
+                // Prefer attack even if it has only 30% of the visits of best move
+                if (bestAttack.Visits >= bestMove.Visits * 0.3)
+                {
+                    return bestAttack.Action;
+                }
+            }
+            else
+            {
+                // Only attacks available, return best one
+                return bestAttack.Action;
+            }
+        }
+
+        // No attack actions available or move is clearly better, return best by visits
         MCTSNode bestChild = root.Children.OrderByDescending(c => c.Visits).First();
         return bestChild.Action;
     }
@@ -175,12 +217,32 @@ public class MonteCarloTreeSearch
         if (node.IsTerminal())
             return node;
 
-        // If not fully expanded, expand a random untried action
+        // If not fully expanded, expand an untried action (PRIORITIZE ATTACKS!)
         if (node.UntriedActions.Count > 0)
         {
-            // Pick a random untried action
-            int index = random.Next(node.UntriedActions.Count);
-            GameAction action = node.UntriedActions[index];
+            // CRITICAL: Always expand attack actions first if available!
+            GameAction action = null;
+            int index = -1;
+
+            // Find first attack action
+            for (int i = 0; i < node.UntriedActions.Count; i++)
+            {
+                if (node.UntriedActions[i].Type == ActionType.Attack ||
+                    node.UntriedActions[i].Type == ActionType.MoveAndAttack)
+                {
+                    action = node.UntriedActions[i];
+                    index = i;
+                    break;
+                }
+            }
+
+            // If no attacks available, pick random move
+            if (action == null)
+            {
+                index = random.Next(node.UntriedActions.Count);
+                action = node.UntriedActions[index];
+            }
+
             node.UntriedActions.RemoveAt(index);
 
             // Clone state and apply action

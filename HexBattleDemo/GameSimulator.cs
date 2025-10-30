@@ -103,18 +103,38 @@ public class GameSimulator
 
     /// <summary>
     /// Get all possible actions for all units of a faction
+    /// IMPORTANT: Returns attacks first, then moves - prioritizes attacking!
     /// </summary>
     public List<GameAction> GetAllPossibleActions(GameState state, Color faction)
     {
-        List<GameAction> allActions = new List<GameAction>();
+        List<GameAction> attacks = new List<GameAction>();
+        List<GameAction> moves = new List<GameAction>();
 
         foreach (var unit in state.GetFactionUnits(faction))
         {
             if (unit.IsAlive && unit.State != HexBattleDemo.UnitState.Passive)
             {
-                allActions.AddRange(GetPossibleActions(state, unit));
+                var unitActions = GetPossibleActions(state, unit);
+
+                // Separate attacks from moves
+                foreach (var action in unitActions)
+                {
+                    if (action.Type == ActionType.Attack || action.Type == ActionType.MoveAndAttack)
+                    {
+                        attacks.Add(action);
+                    }
+                    else
+                    {
+                        moves.Add(action);
+                    }
+                }
             }
         }
+
+        // CRITICAL: Return attacks first! This ensures MCTS explores attacks before moves
+        List<GameAction> allActions = new List<GameAction>();
+        allActions.AddRange(attacks);
+        allActions.AddRange(moves);
 
         // If no actions available (all units passive), add pass action for first unit
         if (allActions.Count == 0)
